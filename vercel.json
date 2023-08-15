@@ -1,26 +1,15 @@
 {
   "version": 2,
-  "build": {
-    "env": {
-      "DB_USER": "user",
-      "DB_PASSWORD": "gQLMkyxR6neB0iaE",
-      "DB_NAME": "empresa-do-ben",
-      "JWT_SECRET": "minha_chave_secreta_para_jwt",
-      "PORT": "3000",
-      "IP_MACHINE": "192.168.1.102",
-      "DEBUG": "true",
-      "CLOUDINARY_USER": "dcqrqv8op",
-      "CLOUDINARY_KEY": "319717681527717",
-      "CLOUDINARY_SECRET": "Zl6Nr3Wb3Ho_e_ElPLTthLaPJbE",
-      "MEUSEGREDO": "MEUSEGREDOGIGANTE"
-    },
-    "src": "*.js",
-    "use": "@vercel/node"
-  },
+  "builds": [
+    {
+      "src": "index.js", 
+      "use": "@vercel/node" 
+    }
+  ],
   "routes": [
     {
-      "src": "(.*)",
-      "dest": "/"
+      "src": "/(.*)",
+      "dest": "/index.js" 
     }
   ]
 }
