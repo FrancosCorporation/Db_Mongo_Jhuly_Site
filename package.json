@@ -1,0 +1,15 @@
+{
+  "name": "db_mongo_jhuly_site",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build":"tsc",
+    "start": "nodemon index.js",
+    "generate-swagger": "node swagger.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
