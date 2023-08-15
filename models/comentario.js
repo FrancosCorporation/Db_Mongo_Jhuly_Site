@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 const comentarioSchema = new Schema({
   usuario: {
     type: String,
-    ref: 'User',
+    ref: 'user',
     required: true,
   },
   conteudo: {

@@ -154,10 +154,11 @@ router.post('/comentarios', authMiddleware, async (req, res) => {
       }
     }
     if (typeof avaliacao == "number") {
-      if (avaliacao || avaliacao < 1 || avaliacao > 5) {
+      if (avaliacao < 1 || avaliacao > 5) {
         return res.status(400).json({ error: 'Avaliação inválida. A avaliação deve estar entre 1 e 5.' });
       }
     }
+    
     // Crie o novo comentário
     const novoComentario = new Comentario({
       usuario,
@@ -190,19 +191,13 @@ router.get('/comentarios', async (req, res) => {
     // Crie uma lista para armazenar os comentários com os nomes de usuário
     const comentariosComNomes = [];
 
-    // Para cada comentário, encontre o nome do usuário associado
+    // Para cada comentário, adicione-o à lista de comentários com nomes
     for (const comentario of comentarios) {
-      const usuario = await User.findById(comentario.usuario); // Supondo que o campo do usuário seja um ID
-      if (usuario) {
-        const comentarioComNome = {
-          nome: usuario.name, // Adicione o nome do usuário ao resultado
-          comentario: comentario.conteudo,
-          avaliacao: comentario.avaliacao.toString(),
-          foto: usuario.photoUrl
-
-        };
-        comentariosComNomes.push(comentarioComNome);
-      }
+      const comentarioComNome = {
+        comentario: comentario.conteudo,
+        avaliacao: comentario.avaliacao.toString()
+      };
+      comentariosComNomes.push(comentarioComNome);
     }
 
     res.status(200).json(comentariosComNomes);

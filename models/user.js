@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 
 
 const UserSchema = new mongoose.Schema({
-  
+    
     name: {
         type: String,
         require: true,
