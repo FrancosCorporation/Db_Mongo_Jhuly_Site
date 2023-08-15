@@ -1,1 +1,27 @@
+# Arquivos de configuração
+node_modules/
+.env
+
+# Arquivos gerados
+dist/
+build/
+*.log
+
+# Arquivos de dependências e gerenciador de pacotes
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+package-lock.json
+
+# Arquivos IDE e editor
+.vscode/
+.idea/
+
+# Outros arquivos e pastas não essenciais
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
 .vercel

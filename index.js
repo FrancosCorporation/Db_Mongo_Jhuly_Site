@@ -1,15 +1,39 @@
-const http = require('http');
+require('dotenv').config();
+const now = new Date();
+require('./controllers/upload_fotos')
+// Convert Date.now() to the time in São Paulo's timezone
+const saoPauloTime = now.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+const swaggerUi = require('swagger-ui-express');
+const swaggerFile = require('./swagger_output.json');// Importe a especificação Swagger gerada pelo swagger-autogen
+const express = require('express')
+const bodyParser = require('body-parser')
+const app = express()
+const cors = require('cors');
+const port = process.env.PORT;
+const IP = process.env.IP_MACHINE;
 
-// Criar um servidor HTTP
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/html' });
-  res.end('<h1>Olá, mundo!</h1>');
+app.use(bodyParser.json())
+
+// Middleware para tratar erros de parsing JSON
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    res.status(400).json({ error: 'JSON inválido. Verifique a sintaxe. Existem campos indevidos' });
+  } else {
+    next();
+  }
 });
+// Habilitar o CORS para todas as rotas
+app.use(cors());
 
-// Definir a porta em que o servidor vai ouvir
-const port = process.env.PORT || 3000;
+app.use(bodyParser.urlencoded({ extended: false }))
+app.use(express.json())
+require('./controllers/authController')(app)
+require('./routes/authRoutes')(app)
+require('./config/db')(app)
 
-// Iniciar o servidor na porta especificada
-server.listen(port, () => {
-  console.log(`Servidor está rodando em http://localhost:${port}`);
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerFile));
+
+app.listen(port, () => {
+  console.log(`Servidor rodando desde a: ${saoPauloTime} no endereço:  http://localhost${":"+port}`);
 });
