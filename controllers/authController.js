@@ -196,7 +196,7 @@ router.get('/comentarios', async (req, res) => {
       const usuario = await User.findById(comentario.usuario); // Supondo que o campo do usuário seja um ID
       if (usuario) {
         const comentarioComNome = {
-          nomeUsuario: usuario.name, // Adicione o nome do usuário ao resultado
+          nome: usuario.name, // Adicione o nome do usuário ao resultado
           comentario: comentario.conteudo,
           avaliacao: comentario.avaliacao.toString()
         };
