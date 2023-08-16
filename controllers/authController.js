@@ -198,7 +198,8 @@ router.get('/comentarios', async (req, res) => {
         const comentarioComNome = {
           nome: usuario.name, // Adicione o nome do usuário ao resultado
           comentario: comentario.conteudo,
-          avaliacao: comentario.avaliacao.toString()
+          avaliacao: comentario.avaliacao.toString(),
+          foto : usuario.photoUrl
         };
         comentariosComNomes.push(comentarioComNome);
       }
