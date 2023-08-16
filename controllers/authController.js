@@ -191,13 +191,17 @@ router.get('/comentarios', async (req, res) => {
     // Crie uma lista para armazenar os comentários com os nomes de usuário
     const comentariosComNomes = [];
 
-    // Para cada comentário, adicione-o à lista de comentários com nomes
+    // Para cada comentário, encontre o nome do usuário associado
     for (const comentario of comentarios) {
-      const comentarioComNome = {
-        comentario: comentario.conteudo,
-        avaliacao: comentario.avaliacao.toString()
-      };
-      comentariosComNomes.push(comentarioComNome);
+      const usuario = await User.findById(comentario.usuario); // Supondo que o campo do usuário seja um ID
+      if (usuario) {
+        const comentarioComNome = {
+          nomeUsuario: usuario.name, // Adicione o nome do usuário ao resultado
+          comentario: comentario.conteudo,
+          avaliacao: comentario.avaliacao.toString()
+        };
+        comentariosComNomes.push(comentarioComNome);
+      }
     }
 
     res.status(200).json(comentariosComNomes);
@@ -206,5 +210,6 @@ router.get('/comentarios', async (req, res) => {
     return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
+
 
 module.exports = app => app.use(router)
