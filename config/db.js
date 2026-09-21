@@ -6,7 +6,9 @@ const user = process.env.DB_USER;
 const host = process.env.DB_NAME;
 
 function connect() {
-mongoose.connect(`mongodb+srv://${user}:${password}@${host}.kivfa4t.mongodb.net/empresa-do-ben`, {
+const uri = process.env.MONGO_URI
+  || `mongodb+srv://${user}:${password}@${host}.kivfa4t.mongodb.net/empresa-do-ben`;
+mongoose.connect(uri, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })

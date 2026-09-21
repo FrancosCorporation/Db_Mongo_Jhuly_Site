@@ -1,0 +1,20 @@
+services:
+  db-mongo-jhuly-site:
+    build: .
+    container_name: db-mongo-jhuly-site
+    restart: unless-stopped
+    ports:
+      - "3101:3000"
+    environment:
+      - PORT=3000
+      - MONGO_URI=mongodb://mongo:27017/app
+    depends_on:
+      - mongo
+  mongo:
+    image: mongo:7
+    container_name: db-mongo-jhuly-site-mongo
+    restart: unless-stopped
+    volumes:
+      - db-mongo-jhuly-site_mongo_data:/data/db
+volumes:
+  db-mongo-jhuly-site_mongo_data:

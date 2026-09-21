@@ -1,5 +1,24 @@
 # Db Mongo Jhuly Site
 
+## 🐳 Instalação e Execução (Docker) — recomendado
+
+### Pré-requisitos
+- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+
+### Rodar com Docker
+```bash
+docker compose up --build
+```
+
+
+### Sem Docker (local)
+```bash
+npm install
+npm start
+```
+Servicos necessarios (local): mongo
+
+
 API REST em **Node.js/Express** + **MongoDB** para o site da Jhuly:
 autenticação JWT, comentários e upload de fotos, com documentação **Swagger**
 e deploy preparado para a **Vercel**.
