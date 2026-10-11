@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm audit --audit-level=high
+      - name: Check JavaScript syntax
+        run: find index.js config controllers models routes -name '*.js' -print0 | xargs -0 -n1 node --check
