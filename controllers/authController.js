@@ -1,216 +1,185 @@
-const express = require('express')
-const User = require('../models/user')
-const path = require('path')
-const router = express.Router()
-const fs = require('fs');
-const multer = require('multer')
-const uploadPhoto = require('./upload_fotos')
+const crypto = require('node:crypto');
+const express = require('express');
+const { rateLimit } = require('express-rate-limit');
+const mongoose = require('mongoose');
+const multer = require('multer');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('../models/user');
 const Comentario = require('../models/comentario');
 const authMiddleware = require('./authMiddleware');
-const bcrypt = require('bcryptjs');
-const meusegredo = process.env.MEUSEGREDO;
+const uploadPhoto = require('./upload_fotos');
+const { jwtAudience, jwtIssuer, jwtSecret } = require('../config/env');
 
+const router = express.Router();
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const acceptedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const dummyPasswordHash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 12);
 
-
-//Users
-
-router.post('/register', async (req, res) => {
-  try {
-    const { email, password, name } = req.body;
-
-    // Verifique se todos os campos obrigatórios foram fornecidos
-    if (!email || !password || !name) {
-      return res.status(422).json({ msg: "Todos os campos obrigatórios devem ser fornecidos" });
-    }
-
-    // Verifique se o usuário já existe
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(409).json({ error: 'Usuário já existe' });
-    }
-
-    // Crie um hash da senha usando o bcrypt
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Crie o novo usuário com a senha criptografada
-    const newUser = new User({
-      email,
-      password: hashedPassword,
-      name,
-    });
-
-    // Salve o usuário no banco de dados
-    await newUser.save();
-    console.log("User Registrado")
-    res.status(201).json({ message: 'Usuário registrado com sucesso' });
-  } catch (err) {
-    console.log(err)
-    res.status(500).json({ error: 'Erro ao registrar usuário' });
-  }
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Tente novamente mais tarde.' },
 });
 
-router.post('/login', async (req, res) => {
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Muitas tentativas. Tente novamente mais tarde.' },
+});
+
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => callback(null, acceptedImageTypes.has(file.mimetype)),
+});
+
+router.post('/register', registerLimiter, async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+
+  if (!emailPattern.test(email) || email.length > 254 || password.length < 8 || password.length > 128 || !name || name.length > 100) {
+    return res.status(422).json({ error: 'E-mail, senha ou nome inválido.' });
+  }
+
   try {
-    const { email, password } = req.body;
-
-    // Verifique se o usuário existe na base de dados
-    const user = await User.findOne({ email }).select('+password');
-
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
-    }
-
-    // Verifique se a senha do usuário foi fornecida
-    if (!password) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
-    }
-
-    // Verifique a senha do usuário
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (validPassword) {
-      // Crie um token JWT para o usuário autenticado
-      const token = jwt.sign({ userId: user._id }, meusegredo, { expiresIn: '2h' });
-      // Retorne o token JWT para o cliente
-      res.status(200).json({ token });
-    } else {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
-    }
+    const hashedPassword = await bcrypt.hash(password, 12);
+    await new User({ email, password: hashedPassword, name }).save();
+    return res.status(201).json({ message: 'Usuário registrado com sucesso.' });
   } catch (error) {
-    res.status(500).json({ error: 'Erro ao fazer login' });
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: 'Usuário já existe.' });
+    }
+
+    console.error('User registration failed:', error?.name ?? 'UnknownError');
+    return res.status(500).json({ error: 'Erro ao registrar usuário.' });
   }
 });
 
-// Configuração do multer para o armazenamento temporário da foto
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads'); // Pasta onde os arquivos serão salvos temporariamente
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname); // Nome do arquivo no formato data-nomeOriginal
-  }
-});
+router.post('/login', loginLimiter, async (req, res) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
-const upload = multer({ storage: storage });
-// Rota para fazer o upload da foto de perfil do usuário
-router.post('/upload_foto_profile', authMiddleware, upload.single('fotoPerfil'), async (req, res) => {
   try {
+    const user = email ? await User.findOne({ email }).select('+password') : null;
+    const passwordHash = user?.password ?? dummyPasswordHash;
+    const validPassword = await bcrypt.compare(password || 'invalid-password', passwordHash);
 
-    if (!req.body.email) {
-      return res.status(406).json({ error: 'Campo email é obrigatório' });
+    if (!user || !validPassword) {
+      return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
 
-    // Verifique se o usuário existe no banco de dados
-    const user = await User.findOne({ email: req.body.email });
+    const token = jwt.sign(
+      { userId: String(user._id), sub: String(user._id) },
+      jwtSecret,
+      { algorithm: 'HS256', audience: jwtAudience, expiresIn: '2h', issuer: jwtIssuer },
+    );
+
+    return res.status(200).json({ token });
+  } catch (error) {
+    console.error('Login failed:', error?.name ?? 'UnknownError');
+    return res.status(500).json({ error: 'Erro ao fazer login.' });
+  }
+});
+
+router.post('/upload_foto_profile', authMiddleware, photoUpload.single('fotoPerfil'), async (req, res) => {
+  if (!req.file) {
+    return res.status(415).json({ error: 'Envie uma imagem JPEG, PNG ou WebP de até 5 MB.' });
+  }
+
+  try {
+    const user = await User.findById(req.user.userId);
     if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
-    // Verifique se a foto de perfil foi fornecida na requisição
-    if (!req.file) {
-      return res.status(400).json({ error: 'Foto de perfil não fornecida' });
+    const { fileTypeFromBuffer } = await import('file-type');
+    const detectedType = await fileTypeFromBuffer(req.file.buffer);
+    if (!detectedType || !acceptedImageTypes.has(detectedType.mime)) {
+      return res.status(415).json({ error: 'O conteúdo do arquivo não é uma imagem JPEG, PNG ou WebP.' });
     }
 
-    const tempPath = req.file.path;
-
-    // Enviar a foto para o Cloudinary
-    const photoUrl = await uploadPhoto(tempPath);
-
-
-    // Apagar a foto temporária do servidor para liberar espaço
-    fs.unlinkSync(tempPath);
-
-    // Atualizar o campo "photoUrl" no usuário no banco de dados com a URL da foto no Cloudinary
+    const photoUrl = await uploadPhoto(req.file.buffer);
     user.photoUrl = photoUrl;
     await user.save();
-
-    res.json({ message: 'Upload da foto de perfil concluído' });
+    return res.status(200).json({ message: 'Upload da foto de perfil concluído.' });
   } catch (error) {
-    console.error('Erro ao fazer o upload da foto:', error);
-    res.status(500).json({ error: 'Erro ao fazer o upload da foto' });
+    if (error?.code === 'CLOUDINARY_NOT_CONFIGURED') {
+      return res.status(503).json({ error: 'O serviço de imagens não está configurado.' });
+    }
+
+    console.error('Profile photo upload failed:', error?.name ?? 'UnknownError');
+    return res.status(502).json({ error: 'Não foi possível salvar a foto de perfil.' });
   }
 });
 
 router.post('/comentarios', authMiddleware, async (req, res) => {
-  try {
-    const { conteudo, avaliacao } = req.body;
-    var avaliacaoDecimal = "";
-    const usuario = req.user.userId; // O usuário autenticado está disponível em req.user
-    // Verifique se o conteúdo está presente no corpo da requisição
-    if (!conteudo) {
-      return res.status(400).json({ error: 'Campo conteudo é obrigatório.' });
-    }
+  const conteudo = typeof req.body?.conteudo === 'string' ? req.body.conteudo.trim() : '';
+  const rawRating = req.body?.avaliacao;
+  const rating = typeof rawRating === 'string' ? Number(rawRating.replace(',', '.')) : rawRating;
 
-    // Verifique se a avaliação está presente no corpo da requisição
-    if (!avaliacao) {
-      return res.status(400).json({ error: 'Campo avaliacao é obrigatório' });
-    }
-    if (typeof avaliacao == "string") {
-      // Converta a vírgula em ponto na avaliação (caso exista)
-      avaliacaoDecimal = parseFloat(avaliacao.replace(',', '.'));
-      // Verifique se a avaliação é um número válido entre 1 e 5
-      if (isNaN(avaliacaoDecimal) || avaliacaoDecimal < 1 || avaliacaoDecimal > 5) {
-        return res.status(400).json({ error: 'Avaliação inválida. A avaliação deve estar entre 1 e 5.' });
-      }
-    }
-    if (typeof avaliacao == "number") {
-      if (avaliacao < 1 || avaliacao > 5) {
-        return res.status(400).json({ error: 'Avaliação inválida. A avaliação deve estar entre 1 e 5.' });
-      }
-    }
-    
-    // Crie o novo comentário
-    const novoComentario = new Comentario({
-      usuario,
-      conteudo,
-      avaliacao: avaliacaoDecimal == "" ? avaliacao : avaliacaoDecimal // Use a avaliação decimal aqui , verificando se existem valores no avaliacaoDecimal
-    });
-
-    // Salve o comentário no banco de dados
-    const comentarioSalvo = await novoComentario.save();
-
-    res.status(201).json(comentarioSalvo);
-  } catch (error) {
-    if (error.message.includes('Unexpected number in JSON')) {
-      console.error(error)
-      return res.status(400).json({ error: 'JSON inválido. Verifique a sintaxe dos campos numéricos.' });
-    } else {
-      // Outros erros não esperados
-      console.error(error)
-      return res.status(500).json({ error: 'Erro interno do servidor.' });
-    }
+  if (!conteudo || conteudo.length > 2000) {
+    return res.status(400).json({ error: 'O conteúdo é obrigatório e deve ter até 2000 caracteres.' });
   }
-});
 
-// Rota para obter todos os comentários
-router.get('/comentarios', async (req, res) => {
+  if (typeof rating !== 'number' || !Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'A avaliação deve ser um número entre 1 e 5.' });
+  }
+
   try {
-    // Consulte o banco de dados para obter todos os comentários
-    const comentarios = await Comentario.find();
-
-    // Crie uma lista para armazenar os comentários com os nomes de usuário
-    const comentariosComNomes = [];
-
-    // Para cada comentário, encontre o nome do usuário associado
-    for (const comentario of comentarios) {
-      const usuario = await User.findById(comentario.usuario); // Supondo que o campo do usuário seja um ID
-      if (usuario) {
-        const comentarioComNome = {
-          nome: usuario.name, // Adicione o nome do usuário ao resultado
-          comentario: comentario.conteudo,
-          avaliacao: comentario.avaliacao.toString(),
-          foto : usuario.photoUrl
-        };
-        comentariosComNomes.push(comentarioComNome);
-      }
+    const userExists = await User.exists({ _id: req.user.userId });
+    if (!userExists) {
+      return res.status(404).json({ error: 'Usuário não encontrado.' });
     }
 
-    res.status(200).json(comentariosComNomes);
+    const comentario = await new Comentario({
+      usuario: req.user.userId,
+      conteudo,
+      avaliacao: mongoose.Types.Decimal128.fromString(String(rating)),
+    }).save();
+
+    return res.status(201).json(comentario);
   } catch (error) {
-    console.error(error);
+    console.error('Comment creation failed:', error?.name ?? 'UnknownError');
     return res.status(500).json({ error: 'Erro interno do servidor.' });
   }
 });
 
+router.get('/comentarios', async (req, res) => {
+  const page = Number(req.query.page ?? 1);
+  const limit = Number(req.query.limit ?? 50);
 
-module.exports = app => app.use(router)
+  if (!Number.isInteger(page) || page < 1 || page > 10000 || !Number.isInteger(limit) || limit < 1 || limit > 50) {
+    return res.status(400).json({ error: 'Use page >= 1 e limit entre 1 e 50.' });
+  }
+
+  try {
+    const comentarios = await Comentario.find()
+      .sort({ dataCriacao: -1, _id: 1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('usuario', 'name photoUrl')
+      .lean();
+
+    const feed = comentarios
+      .filter((comentario) => comentario.usuario)
+      .map((comentario) => ({
+        nome: comentario.usuario.name,
+        comentario: comentario.conteudo,
+        avaliacao: comentario.avaliacao.toString(),
+        foto: comentario.usuario.photoUrl,
+      }));
+
+    return res.status(200).json(feed);
+  } catch (error) {
+    console.error('Comment listing failed:', error?.name ?? 'UnknownError');
+    return res.status(500).json({ error: 'Erro interno do servidor.' });
+  }
+});
+
+module.exports = (app) => app.use(router);

@@ -4,4 +4,9 @@ dist
 build
 *.log
 .env
+.env.*
+!.env.example
+swagger_output.json
+uploads
+.vercel
 npm-debug.log*

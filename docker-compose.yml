@@ -1,20 +1,29 @@
 services:
-  db-mongo-jhuly-site:
-    build: .
-    container_name: db-mongo-jhuly-site
-    restart: unless-stopped
-    ports:
-      - "3101:3000"
-    environment:
-      - PORT=3000
-      - MONGO_URI=mongodb://mongo:27017/app
-    depends_on:
-      - mongo
   mongo:
-    image: mongo:7
-    container_name: db-mongo-jhuly-site-mongo
+    image: mongo:8
     restart: unless-stopped
     volumes:
-      - db-mongo-jhuly-site_mongo_data:/data/db
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      MONGO_URI: mongodb://mongo:27017/db_mongo_jhuly_site
+    ports:
+      - "127.0.0.1:3101:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
 volumes:
-  db-mongo-jhuly-site_mongo_data:
+  mongo_data:

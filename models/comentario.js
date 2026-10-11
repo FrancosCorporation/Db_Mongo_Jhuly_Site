@@ -10,6 +10,8 @@ const comentarioSchema = new Schema({
   conteudo: {
     type: String,
     required: true,
+    trim: true,
+    maxlength: 2000,
   },
   dataCriacao: {
     type: Date,
@@ -22,6 +24,8 @@ const comentarioSchema = new Schema({
     required: true,
   },
 });
+
+comentarioSchema.index({ dataCriacao: -1 });
 
 const Comentario = mongoose.model('Comentario', comentarioSchema);
 

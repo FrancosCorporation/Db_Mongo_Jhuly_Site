@@ -1,20 +1,32 @@
 const mongoose = require('mongoose');
-const express = require('express')
-const router = express.Router()
-const password = process.env.DB_PASSWORD;
-const user = process.env.DB_USER;
-const host = process.env.DB_NAME;
+const { mongoUri } = require('./env');
 
-function connect() {
-const uri = process.env.MONGO_URI
-  || `mongodb+srv://${user}:${password}@${host}.kivfa4t.mongodb.net/empresa-do-ben`;
-mongoose.connect(uri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('Conectado ao MongoDB'))
-.catch(err => console.error('Erro ao conectar ao MongoDB:', err));
+let connectionPromise;
+
+async function connectToDatabase() {
+  if (mongoose.connection.readyState === 1) {
+    return mongoose;
+  }
+
+  if (mongoose.connection.readyState === 0) {
+    connectionPromise = undefined;
+  }
+
+  if (!connectionPromise) {
+    connectionPromise = mongoose
+      .connect(mongoUri, {
+        connectTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 5000,
+        maxPoolSize: 10,
+      })
+      .catch((error) => {
+        connectionPromise = undefined;
+        throw error;
+      });
+  }
+
+  await connectionPromise;
+  return mongoose;
 }
-connect()
 
-module.exports = app => app.use(router)
+module.exports = connectToDatabase;

@@ -1,8 +1,26 @@
-FROM node:20-alpine
+FROM node:24-alpine AS build
 WORKDIR /app
-COPY package*.json ./
-RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
-COPY . .
-ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY index.js swagger.js ./
+COPY config ./config
+COPY controllers ./controllers
+COPY models ./models
+COPY routes ./routes
+RUN npm run build
+
+FROM node:24-alpine AS runtime
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
+WORKDIR /app
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/index.js ./index.js
+COPY --from=build --chown=node:node /app/config ./config
+COPY --from=build --chown=node:node /app/controllers ./controllers
+COPY --from=build --chown=node:node /app/models ./models
+COPY --from=build --chown=node:node /app/routes ./routes
+COPY --from=build --chown=node:node /app/swagger_output.json ./swagger_output.json
+USER node
 EXPOSE 3000
-CMD ["sh", "-c", "node index.js"]
+HEALTHCHECK --interval=30s --timeout=8s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+CMD ["node", "index.js"]

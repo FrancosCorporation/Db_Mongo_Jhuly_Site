@@ -1,82 +1,101 @@
 # Db Mongo Jhuly Site
 
-## 🐳 Instalação e Execução (Docker) — recomendado
+API REST do site da Jhuly para cadastro e autenticação de usuários, comentários
+e fotos de perfil. Usa Node.js 24, Express, MongoDB, JWT, bcryptjs e Cloudinary.
+A documentação interativa fica em `/api-docs`.
 
-### Pré-requisitos
-- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+## Requisitos
 
-### Rodar com Docker
+- Node.js 24 e npm 10 ou superior
+- MongoDB local ou remoto
+- Docker Compose, para executar o conjunto local
+
+## Configuração local
+
 ```bash
-docker compose up --build
+cp .env.example .env
+openssl rand -hex 32
 ```
 
-
-### Sem Docker (local)
-```bash
-npm install
-npm start
-```
-Servicos necessarios (local): mongo
-
-
-API REST em **Node.js/Express** + **MongoDB** para o site da Jhuly:
-autenticação JWT, comentários e upload de fotos, com documentação **Swagger**
-e deploy preparado para a **Vercel**.
-
-![Node.js](https://img.shields.io/badge/Node.js-18-339933?style=flat-square&logo=nodedotjs&logoColor=white)
-![Express](https://img.shields.io/badge/Express-000000?style=flat-square&logo=express&logoColor=white)
-![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white)
-![JWT](https://img.shields.io/badge/JWT-black?style=flat-square&logo=jsonwebtokens)
-![Swagger](https://img.shields.io/badge/Swagger-85EA2D?style=flat-square&logo=swagger&logoColor=black)
-![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/status-2023-legacy-lightgrey?style=flat-square)
-
-## Sobre
-
-Versão do back-end Mongo/Express dedicada ao site da **Jhuly**, mantendo a
-mesma arquitetura da base "Db_Mongo_Empresa_Completo": registro/login de
-usuários, comentários persistidos e upload de imagens via Cloudinary. Faz
-parte do conjunto de projetos de 2023 que compartilham esse mesmo esqueleto.
-
-## Funcionalidades
-
-Comprovadas pelo código:
-
-- **Autenticação JWT**: registro/login com bcryptjs
-  (`controllers/authController.js`) e middleware de proteção de rotas
-  (`controllers/authMiddleware.js`).
-- **Comentários**: model `comentario` exposto pelas rotas.
-- **Upload de fotos**: `multer` + **Cloudinary**
-  (`controllers/upload_fotos.js`).
-- **Swagger**: especificação gerada por `swagger-autogen` e servida em
-  `/api-docs`.
-- **Deploy**: `vercel.json` (serverless).
-
-## Como rodar
+Copie o valor gerado para `JWT_SECRET` no `.env` e configure `MONGO_URI`. Para
+habilitar fotos, preencha `CLOUDINARY_USER` (nome da conta Cloudinary),
+`CLOUDINARY_KEY` e `CLOUDINARY_SECRET`.
 
 ```bash
-npm install
-# configure o .env:
-# PORT=3001
-# MONGO_URI=mongodb://...
-# JWT_SECRET=...
-# CLOUDINARY_URL=cloudinary://...
-npm run generate-swagger
+npm ci
 npm start
 ```
 
-## Estrutura do projeto
+A API inicia em `http://127.0.0.1:3000`; o Swagger fica em
+`http://127.0.0.1:3000/api-docs`. O servidor local não inicia se o MongoDB não
+estiver acessível.
 
+## Executar com Docker Compose
+
+```bash
+cp .env.example .env
+openssl rand -hex 32
+# configure JWT_SECRET no .env
+
+docker compose up --build -d
 ```
-index.js                # bootstrap do Express + Swagger
-config/db.js            # conexão Mongo
-controllers/            # auth, middleware e upload de fotos
-models/                 # schemas mongoose (user, comentario)
-routes/                 # rotas de autenticação
-swagger.js / swagger_output.json
-vercel.json
-```
+
+A API fica em `http://127.0.0.1:3101`. O Compose sobe um MongoDB local com
+volume persistente, aguarda o health check do banco e publica a API somente na
+interface de loopback do computador. Use um MongoDB gerenciado em produção.
+
+## Variáveis de ambiente
+
+| Variável | Obrigatória | Uso |
+|---|---|---|
+| `JWT_SECRET` | Sim | Segredo aleatório com pelo menos 32 bytes; gere um valor diferente por ambiente. |
+| `MONGO_URI` | Sim | URI `mongodb://` ou `mongodb+srv://`. |
+| `CLOUDINARY_USER` | Para fotos | Nome da conta Cloudinary. |
+| `CLOUDINARY_KEY` | Para fotos | Chave da API Cloudinary. |
+| `CLOUDINARY_SECRET` | Para fotos | Segredo da API Cloudinary. |
+| `CORS_ORIGINS` | Não | Origens autorizadas, separadas por vírgula; vazio bloqueia origens externas do navegador. |
+| `PORT` | Não | Porta HTTP; padrão `3000`. |
+| `HOST` | Não | Interface de rede; padrão `127.0.0.1` (Compose usa `0.0.0.0` dentro do contêiner). |
+| `TRUST_PROXY` | Não | Use `1` somente atrás de um proxy confiável. |
+| `JWT_ISSUER` / `JWT_AUDIENCE` | Não | Emissor e público dos tokens; têm padrões próprios deste serviço. |
+
+No deploy Vercel, configure essas variáveis no painel do projeto. Use uma URI
+MongoDB acessível pelo deploy, um `JWT_SECRET` novo e as credenciais Cloudinary
+se habilitar fotos. Configure `CORS_ORIGINS` com as origens reais do site. Não
+armazene segredos em `vercel.json` nem no Git.
+
+## Rotas
+
+| Método | Rota | Acesso | Descrição |
+|---|---|---|---|
+| `GET` | `/` | Público | Confirma que a API respondeu. |
+| `GET` | `/health` | Público | Verifica a conexão MongoDB. |
+| `POST` | `/register` | Público | Cria uma conta com nome, e-mail e senha. |
+| `POST` | `/login` | Público | Retorna um JWT válido por duas horas. |
+| `POST` | `/upload_foto_profile` | JWT | Atualiza a foto da conta autenticada; aceita JPEG, PNG ou WebP até 5 MB. |
+| `GET` | `/comentarios` | Público | Lista comentários recentes paginados (`page`, `limit`, máximo 50). |
+| `POST` | `/comentarios` | JWT | Cria um comentário com avaliação de 1 a 5. |
+
+Rotas protegidas recebem `Authorization: Bearer <token>`. No upload, envie o
+arquivo no campo `fotoPerfil`; a identidade vem do JWT e não de um e-mail enviado
+pelo cliente. O feed público mantém o formato achatado com nome, comentário,
+avaliação e foto, sem expor e-mail ou senha.
+
+## Desenvolvimento e validações
+
+- `npm run build` gera `swagger_output.json` localmente; o arquivo é ignorado pelo Git.
+- `npm run dev` regenera a documentação e usa o modo watch do Node.
+- `npm audit --audit-level=high` verifica vulnerabilidades das dependências.
+- A CI instala pelo lockfile, gera a documentação, executa o audit e valida sintaxe JavaScript.
+
+O projeto ainda não tem testes automatizados. A suíte de testes não foi executada
+nesta atualização.
+
+## Segurança
+
+Veja [SECURITY.md](SECURITY.md) para comunicar vulnerabilidades. Nunca versione
+`.env`; `.env.example` contém somente nomes e valores de exemplo sem credenciais.
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE).
+MIT — consulte [LICENSE](LICENSE).
