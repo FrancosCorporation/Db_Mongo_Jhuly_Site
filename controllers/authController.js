@@ -14,6 +14,7 @@ const { jwtAudience, jwtIssuer, jwtSecret } = require('../config/env');
 const router = express.Router();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const acceptedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const maxBcryptPasswordBytes = 72;
 const dummyPasswordHash = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 12);
 
 const loginLimiter = rateLimit({
@@ -32,9 +33,17 @@ const registerLimiter = rateLimit({
   message: { error: 'Muitas tentativas. Tente novamente mais tarde.' },
 });
 
+const photoUploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Limite de uploads atingido. Tente novamente mais tarde.' },
+});
+
 const photoUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 0, parts: 1 },
   fileFilter: (req, file, callback) => callback(null, acceptedImageTypes.has(file.mimetype)),
 });
 
@@ -42,8 +51,14 @@ router.post('/register', registerLimiter, async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const passwordLengthBytes = Buffer.byteLength(password, 'utf8');
 
-  if (!emailPattern.test(email) || email.length > 254 || password.length < 8 || password.length > 128 || !name || name.length > 100) {
+  if (!emailPattern.test(email) ||
+      email.length > 254 ||
+      Array.from(password).length < 8 ||
+      passwordLengthBytes > maxBcryptPasswordBytes ||
+      !name ||
+      name.length > 100) {
     return res.status(422).json({ error: 'E-mail, senha ou nome inválido.' });
   }
 
@@ -64,13 +79,15 @@ router.post('/register', registerLimiter, async (req, res) => {
 router.post('/login', loginLimiter, async (req, res) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
+  const passwordTooLong = Buffer.byteLength(password, 'utf8') > maxBcryptPasswordBytes;
 
   try {
     const user = email ? await User.findOne({ email }).select('+password') : null;
     const passwordHash = user?.password ?? dummyPasswordHash;
-    const validPassword = await bcrypt.compare(password || 'invalid-password', passwordHash);
+    const passwordToCompare = passwordTooLong ? 'invalid-password' : password || 'invalid-password';
+    const validPassword = await bcrypt.compare(passwordToCompare, passwordHash);
 
-    if (!user || !validPassword) {
+    if (!user || passwordTooLong || !validPassword) {
       return res.status(401).json({ error: 'Credenciais inválidas.' });
     }
 
@@ -87,7 +104,7 @@ router.post('/login', loginLimiter, async (req, res) => {
   }
 });
 
-router.post('/upload_foto_profile', authMiddleware, photoUpload.single('fotoPerfil'), async (req, res) => {
+router.post('/upload_foto_profile', authMiddleware, photoUploadLimiter, photoUpload.single('fotoPerfil'), async (req, res) => {
   if (!req.file) {
     return res.status(415).json({ error: 'Envie uma imagem JPEG, PNG ou WebP de até 5 MB.' });
   }

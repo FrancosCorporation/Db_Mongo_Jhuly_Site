@@ -16,7 +16,11 @@ module.exports = (req, res, next) => {
       audience: jwtAudience,
     });
 
-    if (typeof decodedToken === 'string' || typeof decodedToken.userId !== 'string') {
+    if (typeof decodedToken === 'string' ||
+        typeof decodedToken.userId !== 'string' ||
+        typeof decodedToken.sub !== 'string' ||
+        decodedToken.sub !== decodedToken.userId ||
+        !Number.isSafeInteger(decodedToken.exp)) {
       return res.status(401).json({ error: 'Acesso não autorizado.' });
     }
 

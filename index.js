@@ -41,7 +41,6 @@ app.use(rateLimit({
   limit: 120,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
 }));
 
 app.get('/health', async (req, res) => {

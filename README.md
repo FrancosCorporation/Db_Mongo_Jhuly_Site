@@ -81,6 +81,8 @@ arquivo no campo `fotoPerfil`; a identidade vem do JWT e não de um e-mail envia
 pelo cliente. O feed público mantém o formato achatado com nome, comentário,
 avaliação e foto, sem expor e-mail ou senha.
 
+Senhas exigem pelo menos 8 caracteres e aceitam até 72 bytes UTF-8 para evitar truncamento do bcrypt. A API aplica um limite geral de 120 requisições por minuto por IP, incluindo `/health`; login e cadastro têm limites adicionais. O upload aceita um arquivo (`fotoPerfil`) de até 5 MB e permite 10 tentativas por hora e endereço IP.
+
 ## Desenvolvimento e validações
 
 - `npm run build` gera `swagger_output.json` localmente; o arquivo é ignorado pelo Git.
